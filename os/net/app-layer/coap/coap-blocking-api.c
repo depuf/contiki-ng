@@ -53,7 +53,7 @@
 /* Log configuration */
 #include "coap-log.h"
 #define LOG_MODULE "coap"
-#define LOG_LEVEL  LOG_LEVEL_COAP
+#define LOG_LEVEL  LOG_LEVEL_NONE
 
 #if defined(WITH_OSCORE) && defined(OSCORE_EP_CTX_ASSOCIATION)
 /* For OSCORE */
@@ -130,6 +130,7 @@ PT_THREAD(coap_blocking_request
       coap_send_transaction(state->transaction);
       LOG_DBG("Requested #%"PRIu32" (MID %u)\n", state->block_num, request->mid);
 
+    
       PT_YIELD_UNTIL(&blocking_state->pt, ev == PROCESS_EVENT_POLL);
 
       if(!state->response) {

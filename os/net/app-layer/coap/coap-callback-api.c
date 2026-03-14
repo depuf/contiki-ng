@@ -59,7 +59,7 @@
 /* Log configuration */
 #include "coap-log.h"
 #define LOG_MODULE "coap"
-#define LOG_LEVEL  LOG_LEVEL_COAP
+#define LOG_LEVEL  LOG_LEVEL_NONE
 
 static void coap_request_callback(void *callback_data, coap_message_t *response);
 

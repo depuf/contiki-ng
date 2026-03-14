@@ -57,7 +57,7 @@
 /* Log configuration */
 #include "coap-log.h"
 #define LOG_MODULE "coap"
-#define LOG_LEVEL  LOG_LEVEL_COAP 
+#define LOG_LEVEL   LOG_LEVEL_NONE
 
 #ifdef WITH_OSCORE
 #include "oscore.h"
@@ -423,13 +423,19 @@ coap_serialize_message_coap(coap_message_t *coap_pkt, uint8_t *buffer)
   return (option - buffer) + coap_pkt->payload_len; /* message length */
 }
 
+#include "energest.h"
 size_t
 coap_serialize_message(coap_message_t *coap_pkt, uint8_t *buffer)
 {
 #ifdef WITH_OSCORE
   if(coap_is_option(coap_pkt, COAP_OPTION_OSCORE)) {
 #ifdef OSCORE_CLIENT_MODE
+    rtimer_clock_t cpu_start = RTIMER_NOW();
+
     size_t message_len = oscore_prepare_nested_message(coap_pkt, buffer);
+
+    rtimer_clock_t cpu_construction = RTIMER_NOW() - cpu_start;
+    printf("Construction: %lu us\n", (uint32_t)(cpu_construction * 1000000 / RTIMER_ARCH_SECOND));
 #else
     size_t message_len = oscore_prepare_message(coap_pkt, buffer);
 #endif

@@ -48,7 +48,7 @@
 /* Log configuration */
 #include "coap-log.h"
 #define LOG_MODULE "oscore-crypto"
-#define LOG_LEVEL LOG_LEVEL_COAP
+#define LOG_LEVEL LOG_LEVEL_NONE
 
 
 #ifdef WITH_GROUPCOM

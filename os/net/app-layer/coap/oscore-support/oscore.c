@@ -53,7 +53,7 @@
 /* Log configuration */
 #include "coap-log.h"
 #define LOG_MODULE "oscore"
-#define LOG_LEVEL LOG_LEVEL_COAP
+#define LOG_LEVEL LOG_LEVEL_NONE
 
 // From MBradbury
 // GCC 9 newlib is broken
@@ -169,7 +169,7 @@ static int oscore_encode_option_value(uint8_t *option_buffer, const cose_encrypt
     return 0;
   }
   option_buffer[0] = 0;
-  if (cose->partial_iv_len > 0 && cose->partial_iv != NULL && include_partial_iv)
+  if (cose->partial_iv_len > 0 && include_partial_iv)
   {
     option_buffer[0] |= (0x07 & cose->partial_iv_len);
     memcpy(&(option_buffer[offset]), cose->partial_iv, cose->partial_iv_len);
@@ -351,10 +351,10 @@ coap_status_t oscore_decode_message(coap_message_t *coap_pkt)
     /*4 Verify the ‘Partial IV’ parameter using the Replay Window, as described in Section 7.4. */
     if (!oscore_validate_sender_seq(&ctx->recipient_context, cose))
     {
-      // LOG_WARN("OSCORE Replayed or old message\n");
-      // coap_error_message = "Replay detected";
-      // return UNAUTHORIZED_4_01;
-    } // TODO: uncomment this
+      LOG_WARN("OSCORE Replayed or old message\n");
+      coap_error_message = "Replay detected";
+      return UNAUTHORIZED_4_01;
+    } 
 
     cose_encrypt0_set_key(cose, ctx->recipient_context.recipient_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
   }
@@ -957,10 +957,10 @@ size_t oscore_prepare_nested_message(coap_message_t *coap_pkt,
 
   oscore_path_t *path = oscore_ep_path_get(coap_pkt->dest_ep);
 
-  // if (path == NULL || path->num_layers <= 0 || !path->layers) {
-  //   /* Not nested OSCORE */
-  //   return oscore_prepare_message(coap_pkt, buf_a);
-  // }
+  if (path == NULL || path->num_layers <= 0 || !path->layers) {
+    /* Not nested OSCORE */
+    return oscore_prepare_message(coap_pkt, buf_a);
+  }
   
 
   // buffers to keep track of what to encrypt
@@ -993,11 +993,12 @@ size_t oscore_prepare_nested_message(coap_message_t *coap_pkt,
 
       // packet code hard-coded to POST to carry payload. dummy MID should be fine
       uint16_t mid = 0x1234;
-      coap_init_message(&temp_packet, COAP_TYPE_NON, COAP_POST, mid);
+      coap_init_message(&temp_packet, COAP_TYPE_CON, COAP_POST, mid);
       uint8_t new_token[2];
       uint16_t rand_val = random_rand();
       new_token[0] = (uint8_t)(rand_val & 0xFF);
       new_token[1] = (uint8_t)(rand_val >> 8);
+      // uint8_t new_token[2] = {0x44, 0xf3};
       coap_set_token(&temp_packet, new_token, sizeof(new_token));
       coap_set_payload(&temp_packet, temp_buf, len);
 
@@ -1014,7 +1015,6 @@ size_t oscore_prepare_nested_message(coap_message_t *coap_pkt,
 
 coap_status_t oscore_decode_nested_message(coap_message_t *received, uint8_t *coap_pkt, size_t coap_pkt_len, const coap_endpoint_t *src)
 {
-  //uint8_t temp_buf[1024];
   coap_status_t status;
 
   uint8_t *current_buf = coap_pkt;
@@ -1054,7 +1054,7 @@ coap_status_t oscore_decode_nested_message(coap_message_t *received, uint8_t *co
       coap_endpoint_t proxy_uri;
       coap_endpoint_parse(received->proxy_uri, strlen(received->proxy_uri), &proxy_uri);
       coap_sendto(&proxy_uri, current_buf, current_len);
-      break;
+      return MANUAL_RESPONSE;
     } else {
       //TODO: change condition to keep decrypting
       LOG_DBG("Final message received!");
@@ -1068,9 +1068,12 @@ coap_status_t oscore_decode_nested_message(coap_message_t *received, uint8_t *co
   
 }
 
+#include "energest.h"
 coap_status_t oscore_decode_nested_response(coap_message_t *received, uint8_t *coap_pkt, size_t coap_pkt_len, const coap_endpoint_t *src)
 {
-  //uint8_t temp_buf[1024];
+
+  rtimer_clock_t cpu_start = RTIMER_NOW();
+
   coap_status_t status;
 
   uint8_t *current_buf = coap_pkt;
@@ -1102,6 +1105,7 @@ coap_status_t oscore_decode_nested_response(coap_message_t *received, uint8_t *c
       break;
     }
 
+    LOG_DBG("Message ID: %u\n", received->mid); 
     LOG_DBG("Code: %d \n", received->code);
     LOG_DBG("URI: %.*s\n", (int)received->uri_path_len, received->uri_path);
     LOG_DBG("Payload: %.*s\n", (int)received->payload_len, (char *)received->payload);
@@ -1110,6 +1114,9 @@ coap_status_t oscore_decode_nested_response(coap_message_t *received, uint8_t *c
     current_len = received->payload_len;
     
   }
+
+  rtimer_clock_t cpu_construction = RTIMER_NOW() - cpu_start;
+  printf("Decryption: %lu us\n", (uint32_t)(cpu_construction * 1000000 / RTIMER_ARCH_SECOND));  
   return status;
   
 }
@@ -1125,6 +1132,10 @@ oscore_handle_message(coap_message_t *msg,
   #ifdef OSCORE_PROXY_MODE
     if (proxy_find_state(msg->token, msg->token_len)) {
         // proxy doesnt decrypt responses
+        if (msg->type == COAP_TYPE_ACK && msg->code == 0) {
+            LOG_DBG("Ignoring bare ACK\n");
+            return NO_ERROR;
+        }
         LOG_DBG("Proxy handling response, encrypting only\n");
         return oscore_proxy_encrypt_response(msg, buf, len);
     }
@@ -1244,7 +1255,7 @@ coap_status_t oscore_proxy_encrypt_response(coap_message_t *response, uint8_t *o
 
     proxy_cleanup_state(state);
     
-    return CHANGED_2_04;
+    return MANUAL_RESPONSE;
 }
 
 void proxy_cleanup_state(proxy_state_t *state)

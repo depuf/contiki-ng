@@ -53,7 +53,7 @@
 /* Log configuration */
 #include "coap-log.h"
 #define LOG_MODULE "coap-eng"
-#define LOG_LEVEL  LOG_LEVEL_COAP
+#define LOG_LEVEL  LOG_LEVEL_NONE
 
 #ifdef WITH_OSCORE
 #include "oscore.h"
@@ -169,12 +169,21 @@ call_service(coap_message_t *request, coap_message_t *response,
 extern coap_resource_t res_well_known_core;
 
 #ifdef WITH_OSCORE
-static void oscore_missing_security_context_default(const coap_endpoint_t *src)
+
+void oscore_missing_security_context_default(const coap_endpoint_t *src)
 {
 }
 
-extern void oscore_missing_security_context(const coap_endpoint_t *src)
-  __attribute__ ((weak, alias ("oscore_missing_security_context_default")));
+/* Weak declaration only */
+__attribute__((weak))
+void oscore_missing_security_context(const coap_endpoint_t *src);
+
+/* Provide fallback definition */
+void oscore_missing_security_context(const coap_endpoint_t *src)
+{
+    oscore_missing_security_context_default(src);
+}
+
 #endif
 
 /*---------------------------------------------------------------------------*/

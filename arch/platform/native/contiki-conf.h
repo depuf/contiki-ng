@@ -86,7 +86,7 @@ typedef unsigned int uip_stats_t;
 
 /* configure queues */
 #ifndef QUEUEBUF_CONF_NUM
-#define QUEUEBUF_CONF_NUM 64
+#define QUEUEBUF_CONF_NUM 4
 #endif /* QUEUEBUF_CONF_NUM */
 
 #define UIP_CONF_IPV6_QUEUE_PKT  1

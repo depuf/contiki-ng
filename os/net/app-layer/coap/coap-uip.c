@@ -63,12 +63,15 @@
 /* Log configuration */
 #include "coap-log.h"
 #define LOG_MODULE "coap-uip"
-#define LOG_LEVEL  LOG_LEVEL_COAP
+#define LOG_LEVEL  LOG_LEVEL_NONE
 
 #ifdef WITH_DTLS
 #include "tinydtls.h"
 #include "dtls.h"
 #endif /* WITH_DTLS */
+#include <rtimer.h>
+#include <cc2538-def.h>
+rtimer_clock_t net_start;
 
 /* sanity check for configured values */
 #if COAP_MAX_PACKET_SIZE > (UIP_BUFSIZE - UIP_IPH_LEN - UIP_UDPH_LEN)
@@ -376,6 +379,13 @@ process_secure_data(void)
 static void
 process_data(void)
 {
+
+  rtimer_clock_t net_end = RTIMER_NOW();
+
+  printf("RTT: %lu us\n",
+    (uint32_t)(((uint64_t)(net_end - net_start) * 1000000) / RTIMER_ARCH_SECOND));
+
+
   LOG_INFO("receiving UDP datagram from [");
   LOG_INFO_6ADDR(&UIP_IP_BUF->srcipaddr);
   LOG_INFO_("]:%u\n", uip_ntohs(UIP_UDP_BUF->srcport));
@@ -407,6 +417,8 @@ schedule_send_response(void)
 }
 /*---------------------------------------------------------------------------*/
 #endif
+
+
 int
 coap_sendto(const coap_endpoint_t *ep, const uint8_t *data, uint16_t length)
 {
@@ -442,6 +454,9 @@ coap_sendto(const coap_endpoint_t *ep, const uint8_t *data, uint16_t length)
     }
   }
 #endif /* WITH_DTLS */
+
+  net_start = RTIMER_NOW();
+  printf("RTT start: %lu\n", net_start);
   
   uip_udp_packet_sendto(udp_conn, data, length, &ep->ipaddr, ep->port);
   return length;
