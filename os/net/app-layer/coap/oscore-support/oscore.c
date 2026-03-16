@@ -1097,23 +1097,6 @@ coap_status_t oscore_decode_nested_message(coap_message_t *received,
     }
 
     return status;
-      proxy_store_state(received->token, received->token_len, src, received->security_context);
-      
-      coap_endpoint_t proxy_uri;
-      coap_endpoint_parse(received->proxy_uri, strlen(received->proxy_uri), &proxy_uri);
-      coap_sendto(&proxy_uri, current_buf, current_len);
-      return MANUAL_RESPONSE;
-    } else {
-      //TODO: change condition to keep decrypting
-      LOG_DBG("Final message received!");
-      break;
-    }
-    #endif
-    break;
-    
-  }
-  return status;
-  
 }
 
 #include "energest.h"
@@ -1181,14 +1164,6 @@ oscore_handle_message(coap_message_t *msg,
 
     proxy_state_t *state = proxy_find_state_by_forward_token(buf + 4, buf[0] & 0x0F);
     if (state) {
-{ 
-  #ifdef OSCORE_PROXY_MODE
-    if (proxy_find_state(msg->token, msg->token_len)) {
-        // proxy doesnt decrypt responses
-        if (msg->type == COAP_TYPE_ACK && msg->code == 0) {
-            LOG_DBG("Ignoring bare ACK\n");
-            return NO_ERROR;
-        }
         LOG_DBG("Proxy handling response, encrypting only\n");
         return oscore_proxy_encrypt_response(msg, buf, len, state);
     }
@@ -1200,6 +1175,7 @@ oscore_handle_message(coap_message_t *msg,
 
   return oscore_decode_nested_message(msg, buf, len, src);
 }
+
 
 #ifdef OSCORE_PROXY_MODE
 static proxy_state_t proxy_states[1];
@@ -1326,27 +1302,6 @@ coap_status_t oscore_proxy_encrypt_response(coap_message_t *response,
   proxy_cleanup_state(state);
 
   return CHANGED_2_04;
-    LOG_DBG("Setting payload: len=%zu\n", len);
-    LOG_DBG_BYTES(output_buf, len);
-    LOG_DBG_("\n");
-    coap_set_payload(&temp_packet, output_buf, len);
-
-    //memcpy(&temp_packet, response, sizeof(coap_message_t));
-    
-    temp_packet.security_context = state->security_ctx;
-    size_t length = oscore_prepare_message(&temp_packet, output_buf);
-    
-    if (length == 0) {
-        LOG_ERR("Failed to encrypt response\n");
-        return INTERNAL_SERVER_ERROR_5_00;
-    }
-    
-    LOG_DBG("Encrypted response, len=%zu\n", length);
-    coap_sendto(&state->previous_hop, output_buf, length);
-
-    proxy_cleanup_state(state);
-    
-    return MANUAL_RESPONSE;
 }
 
 void proxy_cleanup_state(proxy_state_t *state)
