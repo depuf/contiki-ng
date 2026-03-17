@@ -42,6 +42,7 @@
 #include "contiki-net.h"
 #include "coap-engine.h"
 #include "coap-blocking-api.h"
+#include "energest.h"
 #if PLATFORM_SUPPORTS_BUTTON_HAL
 #include "dev/button-hal.h"
 #else
@@ -52,10 +53,11 @@
 #include "oscore.h"
 /* Key material, sender-ID and receiver-ID used for deriving an OSCORE-Security-Context. Note that Sender-ID and Receiver-ID is 
  * mirrored in the Client and Server. */
-uint8_t master_secret[35] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23};
+uint8_t master_secret[16] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10};
 uint8_t salt[8] = {0x9e, 0x7c, 0xa9, 0x22, 0x23, 0x78, 0x63, 0x40}; 
-uint8_t sender_id[] = { 0x63, 0x6C, 0x69, 0x65, 0x6E, 0x74 };
-uint8_t receiver_id[] = { 0x73, 0x65, 0x72, 0x76, 0x65, 0x72 };
+uint8_t sender_id[] = { 0x01 };
+uint8_t receiver_id[] = { 0x05 };
+uint8_t id_contexts[] = { 0x01};
 #endif /* WITH_OSCORE */
 
 /* Log configuration */
@@ -66,7 +68,7 @@ uint8_t receiver_id[] = { 0x73, 0x65, 0x72, 0x76, 0x65, 0x72 };
 #define TOGGLE_INTERVAL 10
 
 /* FIXME: This server address is hard-coded for Cooja and link-local for unconnected border router. */
-#define SERVER_EP "coap://[fe80::202:0002:0002:0002]"
+#define SERVER_EP "coap://[fe80::212:4b00:9df:904f]"
 // #define SERVER_EP "coap://[fd00::212:4b00:14b5:ee10]"
 
 PROCESS(er_example_client, "OSCORE Example Client");
@@ -106,7 +108,7 @@ PROCESS_THREAD(er_example_client, ev, data)
   #ifdef WITH_OSCORE
   /*Derive an OSCORE-Security-Context. */
   static oscore_ctx_t context;
-  oscore_derive_ctx(&context, master_secret, 35, NULL, 0, 10, sender_id, 6, receiver_id, 6, NULL, 0);
+  oscore_derive_ctx(&context, master_secret, 16, salt, 8, 10, sender_id, 1, receiver_id, 1, id_contexts, 1);
 
   /* Set the association between a remote URL and a security contect. When sending a message the specified context will be used to 
    * protect the message. Note that this can be done on a resource-by-resource basis. Thus any requests to .well-known/core will not 
@@ -142,7 +144,22 @@ PROCESS_THREAD(er_example_client, ev, data)
       LOG_INFO_COAP_EP(&server_ep);
       LOG_INFO_("\n");
 
+      static uint64_t tx_start = 0;
+      static uint64_t rx_start = 0;
+      static uint64_t cpu_start = 0;
+
+      energest_flush();
+      tx_start = energest_type_time(ENERGEST_TYPE_TRANSMIT);
+      rx_start = energest_type_time(ENERGEST_TYPE_LISTEN);
+      cpu_start = energest_type_time(ENERGEST_TYPE_CPU);
+
       COAP_BLOCKING_REQUEST(&server_ep, request, client_chunk_handler);
+
+      energest_flush();
+      printf("Energest TX: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start));
+      printf("Energest RX: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start));
+      printf("Energest CPU: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_CPU) - cpu_start));
+      printf("\n--Done--\n");
 
       printf("\n--Done--\n");
 

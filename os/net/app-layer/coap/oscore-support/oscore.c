@@ -354,7 +354,7 @@ coap_status_t oscore_decode_message(coap_message_t *coap_pkt)
       LOG_WARN("OSCORE Replayed or old message\n");
       coap_error_message = "Replay detected";
       return UNAUTHORIZED_4_01;
-    } 
+    }
 
     cose_encrypt0_set_key(cose, ctx->recipient_context.recipient_key, COSE_algorithm_AES_CCM_16_64_128_KEY_LEN);
   }
@@ -962,11 +962,11 @@ size_t oscore_prepare_nested_message(coap_message_t *coap_pkt,
     /* Not nested OSCORE */
     return oscore_prepare_message(coap_pkt, buf_a);
   }
-  if (path == NULL || path->num_layers <= 0 || !path->layers) {
+  if (path == NULL || path->num_layers <= 0 || !path->layers)
+  {
     /* Not nested OSCORE */
     return oscore_prepare_message(coap_pkt, buf_a);
   }
-  
 
   // buffers to keep track of what to encrypt
   size_t len = 0;
@@ -977,7 +977,7 @@ size_t oscore_prepare_nested_message(coap_message_t *coap_pkt,
   memcpy(&current_msg, coap_pkt, sizeof(coap_message_t));
 
   // temporary buffer
-  static uint8_t temp_buf[128];
+  static uint8_t temp_buf[150];
 
   // start from server(last layer) and work outward
   for (int i = path->num_layers - 1; i >= 0; i--)
@@ -1017,86 +1017,92 @@ size_t oscore_prepare_nested_message(coap_message_t *coap_pkt,
 }
 
 coap_status_t oscore_decode_nested_message(coap_message_t *received,
-                                            uint8_t *coap_pkt,
-                                            size_t coap_pkt_len,
-                                            const coap_endpoint_t *src)
+                                           uint8_t *coap_pkt,
+                                           size_t coap_pkt_len,
+                                           const coap_endpoint_t *src)
 {
-    coap_status_t status;
-    uint8_t *current_buf = coap_pkt;
-    size_t current_len = coap_pkt_len;
+  coap_status_t status;
+  uint8_t *current_buf = coap_pkt;
+  size_t current_len = coap_pkt_len;
 
-    while (true)
+  while (true)
+  {
+    memset(received, 0, sizeof(*received));
+
+    LOG_DBG("====================================\n");
+    LOG_DBG("Removing OSCORE layer\n");
+    LOG_DBG("====================================\n");
+
+    status = coap_parse_message(received, current_buf, current_len);
+    if (status != NO_ERROR)
     {
-        memset(received, 0, sizeof(*received));
-
-        LOG_DBG("====================================\n");
-        LOG_DBG("Removing OSCORE layer\n");
-        LOG_DBG("====================================\n");
-
-        status = coap_parse_message(received, current_buf, current_len);
-        if (status != NO_ERROR) {
-            LOG_ERR("Status=%u\n", status);
-            break;
-        }
-
-        LOG_DBG("Code: %d \n", received->code);
-        LOG_DBG("URI: %.*s\n", (int)received->uri_path_len, received->uri_path);
-        LOG_DBG("Payload: %.*s\n", (int)received->payload_len, (char *)received->payload);
-
-        current_buf = received->payload;
-        current_len = received->payload_len;
-
-#ifdef OSCORE_PROXY_MODE
-        if (received->proxy_uri != NULL) {
-            LOG_DBG("Forwarding to next proxy\n");
-            LOG_DBG("Proxy URI: %s\n", received->proxy_uri);
-
-            coap_endpoint_t next_hop;
-            coap_endpoint_parse(received->proxy_uri, received->proxy_uri_len, &next_hop);
-
-            if (!oscore_is_request_protected(received)) {
-                LOG_DBG("Plain CoAP, forwarding original packet\n");
-                proxy_store_state(
-                    received->token, received->token_len,
-                    received->token, received->token_len,  /* forward token == client token */
-                    src, NULL
-                );
-                received->proxy_uri     = NULL;
-    received->proxy_uri_len = 0;
-    uint8_t fwd_buf[COAP_MAX_PACKET_SIZE];
-    size_t fwd_len = coap_serialize_message(received, fwd_buf);
-    coap_sendto(&next_hop, fwd_buf, fwd_len);
-            } else {
-                LOG_DBG("OSCORE, forwarding payload\n");
-                if (current_len < 4u + (current_buf[0] & 0x0F)) {
-                    LOG_ERR("Inner packet too short to read token\n");
-                    return MANUAL_RESPONSE;
-                }
-                uint8_t forward_token_len = current_buf[0] & 0x0F;
-                uint8_t *forward_token    = current_buf + 4;
-
-                LOG_DBG("Forward token: ");
-                LOG_DBG_BYTES(forward_token, forward_token_len);
-                LOG_DBG_("\n");
-
-                proxy_store_state(
-                    received->token, received->token_len,
-                    forward_token,   forward_token_len,
-                    src, received->security_context
-                );
-                coap_sendto(&next_hop, current_buf, current_len);
-            }
-
-            return MANUAL_RESPONSE;
-        } else {
-            LOG_DBG("Final message received!\n");
-            break;
-        }
-#endif
-        break;
+      LOG_ERR("Status=%u\n", status);
+      break;
     }
 
-    return status;
+    LOG_DBG("Code: %d \n", received->code);
+    LOG_DBG("URI: %.*s\n", (int)received->uri_path_len, received->uri_path);
+    LOG_DBG("Payload: %.*s\n", (int)received->payload_len, (char *)received->payload);
+
+    current_buf = received->payload;
+    current_len = received->payload_len;
+
+#ifdef OSCORE_PROXY_MODE
+    if (received->proxy_uri != NULL)
+    {
+      LOG_DBG("Forwarding to next proxy\n");
+      LOG_DBG("Proxy URI: %s\n", received->proxy_uri);
+
+      coap_endpoint_t next_hop;
+      coap_endpoint_parse(received->proxy_uri, received->proxy_uri_len, &next_hop);
+
+      if (!oscore_is_request_protected(received))
+      {
+        LOG_DBG("Plain CoAP, forwarding original packet\n");
+        proxy_store_state(
+            received->token, received->token_len,
+            received->token, received->token_len, /* forward token == client token */
+            src, NULL);
+        received->proxy_uri = NULL;
+        received->proxy_uri_len = 0;
+        uint8_t fwd_buf[COAP_MAX_PACKET_SIZE];
+        size_t fwd_len = coap_serialize_message(received, fwd_buf);
+        coap_sendto(&next_hop, fwd_buf, fwd_len);
+      }
+      else
+      {
+        LOG_DBG("OSCORE, forwarding payload\n");
+        if (current_len < 4u + (current_buf[0] & 0x0F))
+        {
+          LOG_ERR("Inner packet too short to read token\n");
+          return MANUAL_RESPONSE;
+        }
+        uint8_t forward_token_len = current_buf[0] & 0x0F;
+        uint8_t *forward_token = current_buf + 4;
+
+        LOG_DBG("Forward token: ");
+        LOG_DBG_BYTES(forward_token, forward_token_len);
+        LOG_DBG_("\n");
+
+        proxy_store_state(
+            received->token, received->token_len,
+            forward_token, forward_token_len,
+            src, received->security_context);
+        coap_sendto(&next_hop, current_buf, current_len);
+      }
+
+      return MANUAL_RESPONSE;
+    }
+    else
+    {
+      LOG_DBG("Final message received!\n");
+      break;
+    }
+#endif
+    break;
+  }
+
+  return status;
 }
 
 #include "energest.h"
@@ -1136,7 +1142,7 @@ coap_status_t oscore_decode_nested_response(coap_message_t *received, uint8_t *c
       break;
     }
 
-    LOG_DBG("Message ID: %u\n", received->mid); 
+    LOG_DBG("Message ID: %u\n", received->mid);
     LOG_DBG("Code: %d \n", received->code);
     LOG_DBG("URI: %.*s\n", (int)received->uri_path_len, received->uri_path);
     LOG_DBG("Payload: %.*s\n", (int)received->payload_len, (char *)received->payload);
@@ -1146,10 +1152,13 @@ coap_status_t oscore_decode_nested_response(coap_message_t *received, uint8_t *c
   }
 
   rtimer_clock_t cpu_construction = RTIMER_NOW() - cpu_start;
-  printf("Decryption: %lu us\n", (uint32_t)(cpu_construction * 1000000 / RTIMER_ARCH_SECOND));  
+  printf("Decryption: %lu us\n", (uint32_t)(cpu_construction * 1000000 / RTIMER_ARCH_SECOND));
   return status;
-  
 }
+
+static uint64_t exchange_tx_start = 0;
+static uint64_t exchange_rx_start = 0;
+static uint64_t exchange_cpu_start = 0;
 
 coap_status_t
 oscore_handle_message(coap_message_t *msg,
@@ -1159,23 +1168,27 @@ oscore_handle_message(coap_message_t *msg,
 {
 #ifdef OSCORE_PROXY_MODE
   LOG_DBG("Token: ");
-    LOG_DBG_BYTES(buf + 4, buf[0] & 0x0F);
-    LOG_DBG_("\n");
+  LOG_DBG_BYTES(buf + 4, buf[0] & 0x0F);
+  LOG_DBG_("\n");
 
-    proxy_state_t *state = proxy_find_state_by_forward_token(buf + 4, buf[0] & 0x0F);
-    if (state) {
-        LOG_DBG("Proxy handling response, encrypting only\n");
-        return oscore_proxy_encrypt_response(msg, buf, len, state);
-    }
+  proxy_state_t *state = proxy_find_state_by_forward_token(buf + 4, buf[0] & 0x0F);
+  if (state)
+  {
+    LOG_DBG("Proxy handling response, encrypting only\n");
+    return oscore_proxy_encrypt_response(msg, buf, len, state);
+  }
 #endif
 
 #ifdef OSCORE_CLIENT_MODE
   return oscore_decode_nested_response(msg, buf, len, src);
 #endif
 
+  energest_flush();
+  exchange_tx_start = energest_type_time(ENERGEST_TYPE_TRANSMIT);
+  exchange_rx_start = energest_type_time(ENERGEST_TYPE_LISTEN);
+  exchange_cpu_start = energest_type_time(ENERGEST_TYPE_CPU);
   return oscore_decode_nested_message(msg, buf, len, src);
 }
-
 
 #ifdef OSCORE_PROXY_MODE
 static proxy_state_t proxy_states[1];
@@ -1270,6 +1283,10 @@ coap_status_t oscore_proxy_encrypt_response(coap_message_t *response,
   if (state->security_ctx == NULL)
   {
     LOG_DBG("Response isn't OSCORE protected\n");
+      energest_flush();
+    printf("Proxy Energest TX: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_TRANSMIT) - exchange_tx_start));
+    printf("Proxy Energest RX: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_LISTEN) - exchange_rx_start));
+    printf("Proxy Energest CPU: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_CPU) - exchange_cpu_start));
     coap_sendto(&state->previous_hop, output_buf, len);
     proxy_cleanup_state(state);
     return MANUAL_RESPONSE;
@@ -1297,6 +1314,11 @@ coap_status_t oscore_proxy_encrypt_response(coap_message_t *response,
     return INTERNAL_SERVER_ERROR_5_00;
   }
 
+  energest_flush();
+    printf("Proxy Energest TX: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_TRANSMIT) - exchange_tx_start));
+    printf("Proxy Energest RX: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_LISTEN) - exchange_rx_start));
+    printf("Proxy Energest CPU: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_CPU) - exchange_cpu_start));
+
   LOG_DBG("Encrypted response, len=%zu\n", length);
   coap_sendto(&state->previous_hop, output_buf, length);
   proxy_cleanup_state(state);
@@ -1306,7 +1328,8 @@ coap_status_t oscore_proxy_encrypt_response(coap_message_t *response,
 
 void proxy_cleanup_state(proxy_state_t *state)
 {
-  if (!state) return;
+  if (!state)
+    return;
   memset(state, 0, sizeof(*state));
 }
 #endif

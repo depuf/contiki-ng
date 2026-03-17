@@ -43,6 +43,7 @@
 #include "contiki-net.h"
 #include "coap-engine.h"
 #include "coap-blocking-api.h"
+#include "energest.h"
 #if PLATFORM_SUPPORTS_BUTTON_HAL
 #include "dev/button-hal.h"
 #else
@@ -55,7 +56,9 @@
 #define LOG_LEVEL  LOG_LEVEL_APP
 
 /* FIXME: This server address is hard-coded for Cooja and link-local for unconnected border router. */
-#define SERVER_EP "coap://[fe80::212:7402:0002:0202]"
+//#define SERVER_EP "coap://[fe80::212:7402:0002:0202]"
+#define SERVER_EP "coap://[fe80::212:4b00:9df:904f]"
+#define PROXY_EP "coap://[fe80::212:4b00:9df:8ecb]"
 
 #define TOGGLE_INTERVAL 10
 
@@ -65,10 +68,10 @@ AUTOSTART_PROCESSES(&er_example_client);
 static struct etimer et;
 
 /* Example URIs that can be queried. */
-#define NUMBER_OF_URLS 4
+#define NUMBER_OF_URLS 5
 /* leading and ending slashes only for demo purposes, get cropped automatically when setting the Uri-Path */
 char *service_urls[NUMBER_OF_URLS] =
-{ ".well-known/core", "/actuators/toggle", "battery/", "error/in//path" };
+{ ".well-known/core", "/actuators/toggle", "battery/", "error/in//path", "test/hello" };
 #if PLATFORM_HAS_BUTTON
 static int uri_switch = 0;
 #endif
@@ -77,6 +80,7 @@ static int uri_switch = 0;
 void
 client_chunk_handler(coap_message_t *response)
 {
+  printf("chunk handler called\n");
   const uint8_t *chunk;
 
   if(response == NULL) {
@@ -90,12 +94,12 @@ client_chunk_handler(coap_message_t *response)
 }
 PROCESS_THREAD(er_example_client, ev, data)
 {
-  static coap_endpoint_t server_ep;
+  static coap_endpoint_t proxy_ep;
   PROCESS_BEGIN();
 
   static coap_message_t request[1];      /* This way the packet can be treated as pointer as usual. */
 
-  coap_endpoint_parse(SERVER_EP, strlen(SERVER_EP), &server_ep);
+  coap_endpoint_parse(PROXY_EP, strlen(SERVER_EP), &proxy_ep);
 
   etimer_set(&et, TOGGLE_INTERVAL * CLOCK_SECOND);
 
@@ -113,17 +117,38 @@ PROCESS_THREAD(er_example_client, ev, data)
       printf("--Toggle timer--\n");
 
       /* prepare request, TID is set by COAP_BLOCKING_REQUEST() */
-      coap_init_message(request, COAP_TYPE_CON, COAP_POST, 0);
-      coap_set_header_uri_path(request, service_urls[1]);
+      coap_init_message(request, COAP_TYPE_CON, COAP_GET, 0);
+      coap_set_header_uri_path(request, service_urls[4]);
 
       const char msg[] = "Toggle!";
 
       coap_set_payload(request, (uint8_t *)msg, sizeof(msg) - 1);
 
-      LOG_INFO_COAP_EP(&server_ep);
+      coap_set_header_proxy_uri(request, "coap://[fe80::212:4b00:9df:904f]");
+      uint8_t new_token[2];
+      uint16_t rand_val = random_rand();
+      new_token[0] = (uint8_t)(rand_val & 0xFF);
+      new_token[1] = (uint8_t)(rand_val >> 8);
+      coap_set_token(request, new_token, sizeof(new_token));
+
+      LOG_INFO_COAP_EP(&proxy_ep);
       LOG_INFO_("\n");
 
-      COAP_BLOCKING_REQUEST(&server_ep, request, client_chunk_handler);
+      static uint64_t tx_start = 0;
+      static uint64_t rx_start = 0;
+      static uint64_t cpu_start = 0;
+
+      energest_flush();
+      tx_start = energest_type_time(ENERGEST_TYPE_TRANSMIT);
+      rx_start = energest_type_time(ENERGEST_TYPE_LISTEN);
+      cpu_start = energest_type_time(ENERGEST_TYPE_CPU);
+
+      COAP_BLOCKING_REQUEST(&proxy_ep, request, client_chunk_handler);
+
+      energest_flush();
+      printf("Energest TX: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start));
+      printf("Energest RX: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start));
+      printf("Energest CPU: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_CPU) - cpu_start));
 
       printf("\n--Done--\n");
 
@@ -143,10 +168,10 @@ PROCESS_THREAD(er_example_client, ev, data)
 
       printf("--Requesting %s--\n", service_urls[uri_switch]);
 
-      LOG_INFO_COAP_EP(&server_ep);
+      LOG_INFO_COAP_EP(&proxy_ep);
       LOG_INFO_("\n");
 
-      COAP_BLOCKING_REQUEST(&server_ep, request,
+      COAP_BLOCKING_REQUEST(&proxy_ep, request,
                             client_chunk_handler);
 
       printf("\n--Done--\n");

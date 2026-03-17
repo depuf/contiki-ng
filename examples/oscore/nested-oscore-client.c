@@ -42,6 +42,7 @@
 #include "contiki-net.h"
 #include "coap-engine.h"
 #include "coap-blocking-api.h"
+#include "energest.h"
 #if PLATFORM_SUPPORTS_BUTTON_HAL
 #include "dev/button-hal.h"
 #else
@@ -67,20 +68,25 @@ uint8_t id_contexts[2][1] = { {0x09},{0x01} };
 /* Log configuration */
 #include "coap-log.h"
 #define LOG_MODULE "client"
-#define LOG_LEVEL  LOG_LEVEL_COAP
+#define LOG_LEVEL  LOG_LEVEL_NONE
 
-#define TOGGLE_INTERVAL 2
+#define TOGGLE_INTERVAL 10
 
 /* FIXME: This server address is hard-coded for Cooja and link-local for unconnected border router. */
 // TODO: proxy address?
-#define SERVER_EP "coap://[fe80::203:0003:0003:0003]" // cooja server
 // #define SERVER_EP "coap://[fd00::212:4b00:14b5:ee10]" // i dont know what server this is
 // #define SERVER_EP "coap://[fd00::1]:5683"
 // #define SERVER_EP "coap://127.0.0.1:5684" // test server
 // #define PROXY_EP "coap://[::1]:5685" // test proxy
-#define PROXY_EP  "coap://[fe80::202:0002:0002:0002]" // cooja proxy
-//#define PROXY_EP "coap://[fd00::1]:5685" // californium proxy
+// #define PROXY_EP "coap://[fd00::1]:5685" // californium proxy
 
+/* Cooja addresses */
+// #define PROXY_EP  "coap://[fe80::202:0002:0002:0002]" 
+// #define SERVER_EP "coap://[fe80::203:0003:0003:0003]" 
+
+/* Board addresses */
+#define PROXY_EP "coap://[fe80::212:4b00:9df:8ecb]"
+#define SERVER_EP "coap://[fe80::212:4b00:9df:904f]"
 
 PROCESS(er_example_client, "Nested OSCORE Example Client");
 AUTOSTART_PROCESSES(&er_example_client);
@@ -96,13 +102,19 @@ char *service_urls[NUMBER_OF_URLS] =
 static int uri_switch = 0;
 #endif
 
+static rtimer_clock_t rtt_start;
 /* This function is will be passed to COAP_BLOCKING_REQUEST() to handle responses. */
 void
 client_chunk_handler(coap_message_t *response)
 {
+  rtimer_clock_t rtt = RTIMER_NOW() - rtt_start;
+  
+  
   const uint8_t *chunk;
-
   int len = coap_get_payload(response, &chunk);
+  if(len <= 0) return;
+  printf("rtt_end: %lu, rtt_start: %lu\n", (uint32_t)RTIMER_NOW(), (uint32_t)rtt_start);
+  printf("Entire Operation: %lu us\n", (uint32_t)(rtt * 1000000 / RTIMER_ARCH_SECOND));
   printf("response: \n");
   printf("|%.*s", len, (char *)chunk);
 }
@@ -166,7 +178,7 @@ PROCESS_THREAD(er_example_client, ev, data)
       LOG_DBG("--Toggle timer--\n");
 
       /* prepare request, TID is set by COAP_BLOCKING_REQUEST() */
-      coap_init_message(request, COAP_TYPE_NON, COAP_GET, 0);
+      coap_init_message(request, COAP_TYPE_CON, COAP_GET, 0);
       coap_set_header_uri_path(request, service_urls[1]);
 
       static oscore_layer_t layers[2];
@@ -193,16 +205,24 @@ PROCESS_THREAD(er_example_client, ev, data)
       LOG_INFO_COAP_EP(&proxy_ep);
       printf("\n");
 
-      printf("num_layers: %d\n", client_path.num_layers);
-oscore_path_t *p = oscore_ep_path_get(&proxy_ep);
-if(p) printf("path num_layers from table: %d\n", p->num_layers);
-else printf("path not found!\n");
+      static uint64_t tx_start = 0;
+      static uint64_t rx_start = 0;
+      static uint64_t cpu_start = 0;
+
+      energest_flush();
+      tx_start = energest_type_time(ENERGEST_TYPE_TRANSMIT);
+      rx_start = energest_type_time(ENERGEST_TYPE_LISTEN);
+      cpu_start = energest_type_time(ENERGEST_TYPE_CPU);
 
       COAP_BLOCKING_REQUEST(&proxy_ep, request, client_chunk_handler);
 
+      energest_flush();
+      printf("Energest TX: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start));
+      printf("Energest RX: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start));
+      printf("Energest CPU: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_CPU) - cpu_start));
       printf("\n--Done--\n");
 
-      //etimer_reset(&et);
+      etimer_reset(&et);
 
 #if PLATFORM_HAS_BUTTON
 #if PLATFORM_SUPPORTS_BUTTON_HAL
@@ -213,7 +233,7 @@ else printf("path not found!\n");
 
       /* send a request to notify the end of the process */
 
-      coap_init_message(request, COAP_TYPE_CON, COAP_GET, 0);
+      coap_init_message(request, COAP_TYPE_NON, COAP_GET, 0);
       coap_set_header_uri_path(request, service_urls[uri_switch]);
 
       printf("--Requesting %s--\n", service_urls[uri_switch]);
@@ -221,8 +241,22 @@ else printf("path not found!\n");
       LOG_INFO_COAP_EP(&server_ep);
       LOG_INFO_("\n");
 
-      COAP_BLOCKING_REQUEST(&server_ep, request,
-                            client_chunk_handler);
+      static uint64_t tx_start = 0;
+      static uint64_t rx_start = 0;
+      static uint64_t cpu_start = 0;
+
+      energest_flush();
+      tx_start = energest_type_time(ENERGEST_TYPE_TRANSMIT);
+      rx_start = energest_type_time(ENERGEST_TYPE_LISTEN);
+      cpu_start = energest_type_time(ENERGEST_TYPE_CPU);
+
+      COAP_BLOCKING_REQUEST(&proxy_ep, request, client_chunk_handler);
+
+      energest_flush();
+      printf("Energest TX: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_TRANSMIT) - tx_start));
+      printf("Energest RX: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_LISTEN) - rx_start));
+      printf("Energest CPU: %lu ticks\n", (uint32_t)(energest_type_time(ENERGEST_TYPE_CPU) - cpu_start));
+
 
       printf("\n--Done--\n");
 
