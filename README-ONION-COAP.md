@@ -1,6 +1,6 @@
 # Onion CoAP — Contiki-NG Extension
 
-This repository is a fork of [Contiki-NG](https://github.com/contiki-ng/contiki-ng) extended with an implementation of onion routing for constrained IoT devices. It uses CoAP as the transport protocol and OSCORE for layered encryption, targeting the Zolertia Firefly (CC2538, 32 KB RAM).
+This repository is a fork of [Contiki-NG](https://github.com/gunzter/contiki-ng) extended with an implementation of onion routing for constrained IoT devices. It uses CoAP as the transport protocol and OSCORE for layered encryption, targeting the Zolertia Firefly (CC2538, 32 KB RAM).
 
 This work was developed as part of an undergraduate dissertation at the University of Glasgow, supervised by Shahid Raza.
 
@@ -10,7 +10,7 @@ This work was developed as part of an undergraduate dissertation at the Universi
 
 Onion CoAP realises Tor-like anonymity on constrained hardware by applying nested OSCORE encryption at the client and forwarding through an intermediate proxy. Each hop decrypts one layer and forwards the remainder, without knowledge of the full circuit.
 
-The core data plane — layered encryption, proxy forwarding, and response re-encryption — is implemented as an extension to the existing Contiki-NG OSCORE stack.
+The core data plane (layered encryption, proxy forwarding, and response re-encryption) is implemented as an extension to the existing Contiki-NG OSCORE stack.
 
 ---
 
@@ -39,7 +39,7 @@ Modified and added files relative to upstream Contiki-NG:
 | `oscore_proxy_encrypt_response` | Re-encrypts a response on the return path before forwarding to previous hop |
 | `oscore_handle_message` | Entry point for OSCORE processing; dispatches to proxy or client path |
 
-Proxy state is stored in `proxy_states[1]` — one concurrent circuit by design.
+Proxy state is stored in `proxy_states[1]` - one concurrent circuit by design.
 
 ---
 
@@ -61,7 +61,7 @@ make TARGET=zoul BOARD=firefly PORT=/path_to_port MAKE_TARGET_MODE=proxy nested-
  
 ### Server
 ```sh
-make TARGET=zoul BOARD=firefly PORT=/path_to_port MAKE_TARGET_MODE=server nested-oscore-server.upload
+make TARGET=zoul BOARD=firefly PORT=/path_to_port nested-oscore-server.upload
 ```
  
 Monitor output:
@@ -93,9 +93,9 @@ Key parameters in `project-conf.h`:
 
 A minimum of three Zolertia Firefly boards are required:
 
-- **Client** — initiates the onion circuit
-- **Proxy** — intermediate relay node
-- **Server** — destination, serves `/test/hello`
+- **Client** : initiates the onion circuit
+- **Proxy** : intermediate relay node
+- **Server** : destination, serves `/test/hello`
 
 Board addresses are hardcoded in `nested-oscore-client.c`. Update `PROXY_EP` and `SERVER_EP` to match your board MAC addresses.
 
@@ -103,10 +103,10 @@ Board addresses are hardcoded in `nested-oscore-client.c`. Update `PROXY_EP` and
 
 ## Known Limitations
 
-- One concurrent circuit (`proxy_states[1]`) — suitable for proof of concept only
+- One concurrent circuit (`proxy_states[1]`), suitable for proof of concept only
 - OSCORE sequence counters are not persisted across resets; reflashing both client and server is required to resynchronise
-- Stack painting shows 68.7% peak utilisation on the client — local `coap_message_t` variables in the encryption loop are a candidate for static allocation
-- Packets exceeding the 127-byte 802.15.4 MTU are fragmented transparently but with increased latency (~241ms mean vs ~121ms)
+- Stack painting shows 68.7% peak utilisation on the client. Local `coap_message_t` variables in the encryption loop are a candidate for static allocation
+- Packets exceeding the 127-byte 802.15.4 MTU are fragmented transparently but with increased latency
 
 ---
 
