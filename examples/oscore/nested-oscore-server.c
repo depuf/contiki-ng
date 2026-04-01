@@ -30,9 +30,11 @@
 
 /**
  * \file
- *      OSCORE server example.
+ *      Server used for Onion CoAP. Derived from the OSCORE
+ *      server example by Martin Gunnarsson.
  * \author
  *      Martin Gunnarsson <martin.gunnarsson@ri.se>
+ *      Manassanan Vongprai
  */
 
 #include <stdio.h>

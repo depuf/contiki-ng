@@ -185,7 +185,6 @@ extern void oscore_missing_security_context(const coap_endpoint_t *src)
 coap_status_t coap_receive(uint8_t *payload, uint16_t payload_length, coap_message_t *message)
 {
 	LOG_DBG("Coap_receive: calling coap_parse for initial processing...\n");
-	//return coap_parse_message(message, payload, payload_length); // nested decryption here too?
   return oscore_decode_nested_message(message,payload,payload_length);
 }
 /*---------------------------------------------------------------------------*/

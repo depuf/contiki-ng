@@ -934,18 +934,7 @@ oscore_prepare_int(oscore_ctx_t *ctx, cose_encrypt0_t *cose,
 
 #endif /*WITH_GROUPCOM*/
 
-// nested OSCORE functions
-
-/* Proxy mode flag */
-// static bool is_proxy_mode = false;
-
-// void oscore_set_proxy_mode(bool enabled) {
-//     is_proxy_mode = enabled;
-// }
-
-// bool oscore_is_proxy(void) {
-//     return is_proxy_mode;
-// }
+/* nested OSCORE functions */ 
 
 size_t oscore_prepare_nested_message(coap_message_t *coap_pkt,
                                      uint8_t *buf_a)
@@ -963,18 +952,14 @@ size_t oscore_prepare_nested_message(coap_message_t *coap_pkt,
     return oscore_prepare_message(coap_pkt, buf_a);
   }
 
-  // buffers to keep track of what to encrypt
   size_t len = 0;
   uint8_t *output_buf = buf_a;
 
-  // copy coap_pkt into current_msg (traversing purposes)
   coap_message_t current_msg;
   memcpy(&current_msg, coap_pkt, sizeof(coap_message_t));
 
-  // temporary buffer
   static uint8_t temp_buf[128];
 
-  // start from server(last layer) and work outward
   for (int i = path->num_layers - 1; i >= 0; i--)
   {
     current_msg.security_context = path->layers[i].ctx;
@@ -983,7 +968,6 @@ size_t oscore_prepare_nested_message(coap_message_t *coap_pkt,
     LOG_DBG("    APPLYING OSCORE LAYER %d\n", i);
     LOG_DBG("====================================\n\n");
 
-    // temp_buf stores oscore'd current_msg, which is a coap msg
     uint8_t *target = (i == 0) ? output_buf : temp_buf;
     len = oscore_prepare_message(&current_msg, target);
 
@@ -991,7 +975,6 @@ size_t oscore_prepare_nested_message(coap_message_t *coap_pkt,
     {
       coap_message_t temp_packet;
 
-      // packet code hard-coded to POST to carry payload. dummy MID should be fine
       uint16_t mid = 0x1234;
       coap_init_message(&temp_packet, COAP_TYPE_CON, COAP_POST, mid);
       uint8_t new_token[2];

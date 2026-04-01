@@ -99,12 +99,7 @@ size_t oscore_prepare_nested_message(coap_message_t *coap_pkt, uint8_t *buf_a);
 coap_status_t oscore_decode_nested_message(coap_message_t *received, uint8_t *coap_pkt, size_t coap_pkt_len, const coap_endpoint_t *src);
 coap_status_t oscore_decode_nested_response(coap_message_t *received, uint8_t *coap_pkt, size_t coap_pkt_len, const coap_endpoint_t *src);
 
-/* Proxy mode functions */
-// void oscore_set_proxy_mode(bool enabled);
-// bool oscore_is_proxy(void);
-
 coap_status_t oscore_handle_message(coap_message_t *msg, uint8_t *buf, size_t len, const coap_endpoint_t *src);
-
 
 typedef struct {
     uint8_t  client_token[8];
